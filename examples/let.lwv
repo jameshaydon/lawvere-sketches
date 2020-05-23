@@ -1,0 +1,58 @@
+Mon = theory {
+  ob M
+  point neutral : M
+  point oper : (M, M) -> M
+}
+
+Nat = theory {
+  ob N
+  point zero : () -> N
+  point suc : N -> N
+  sum N {zero, suc}
+};
+
+model Mon -> Nat {
+  M = N
+  neutral = zero
+  oper : (N, N) -> N
+    let f : t -> (N, N)
+    f1 : t -> N ~ () + N
+    f2 : t -> N
+    
+}
+
+LetLambda = Lambda + theory {
+  mor Let : (Term => Term, Term) -> Term;
+}
+
+theory Lambda {
+
+  type Term;
+  type ListTerm;
+  type IntLit;
+
+  emptyList : ListTerm;
+  cons : Term -> ListTerm -> ListTerm;
+  
+  App : (Term, Term) -> Term;
+  Lam : (Term -> Term) -> Term;
+  Lit : IntLit -> Term;
+  List : ListTerm -> Term;
+
+}
+
+model phi : LetLambda -> Lambda {
+
+  Term |-> Term;
+  IntLit |-> IntLit;
+
+  App |-> App;
+
+  Lam |-> Lam;
+
+  Let |-> \x -> case x of (body, val) -> App (Lam body) val;
+}
+
+model lambdaLet = LetLambda -> TT = free;
+model lambdaSimple = Lambda -> TT = free;
+
