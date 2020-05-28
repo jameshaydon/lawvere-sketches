@@ -1,58 +1,102 @@
-Mon = theory {
-  ob M
-  point neutral : M
-  point oper : (M, M) -> M
-}
+-- The base theory is 'Type', and all the sketches are "over 'Type'". So the
+-- 'Int' in the below sketch really denotes 'Int' in 'Type'.
 
-Nat = theory {
-  ob N
-  point zero : () -> N
-  point suc : N -> N
-  sum N {zero, suc}
+def sketch Dom = {
+  ob Term;
+  mor Lam : (Term => Term) -> Term;
+  mor Lit : Int -> Term;
+  mor Err : () -> Term;
 };
 
-model Mon -> Nat {
-  M = N
-  neutral = zero
-  oper : (N, N) -> N
-    let f : t -> (N, N)
-    f1 : t -> N ~ () + N
-    f2 : t -> N
-    
+def DomTh = theory(Dom);
+
+def functor DomI : DomTh -> Type = [initital];
+
+-- Prints de Bruijn
+def functor PrettyDom : DomTh -> Type = {
+  Term  ~>  Int -> Text;
+  Lam   ~>  \f lvl -> "λ." <> f (show . (subtract lvl)) (lvl + 1)
+  Lit   ~>  \i -> const ("int_" <> show i);
+  Err   ~>  \() -> const "error";
+};
+
+def sketch Lambda = Dom + {
+  mor App : (Term, Term) -> Term;
+  mor Plus : (Term, Term) -> Term;
+};
+
+def LambdaTh = theory(Lambda);
+
+def functor PrettyLambda : LambdaTh -> Type = {
+  extends PrettyDom;
+  App   ~>  \(x,y) lvl -> x lvl <> " " <> y lvl;
+  Plus  ~>  \(x,y) lvl -> x lvl <> " + " <> y lvl;
 }
 
-LetLambda = Lambda + theory {
+def functor LambdaI : LambdaTh -> Type = [initital];
+
+def functor IotaDom : DomTh -> LambdaTh =
+  [caninical via underlying sketches];
+
+-- We get that IotaDom is cartesian for free.
+
+def functor Eval : LambdaTh -> Type = {
+  extends DomI;  -- This means that  Eval . IotaDom == DomI
+  App ~>
+    \(f,x) ->
+      -- Why can we pattern match here?
+      -- - This is defining a function (an arrow in Type), which is extensive, and has
+      --   representing object ().
+      -- - f has type DomI(Term) so we may pattern-match on all the "constructors" of
+      --   Term in the sketch Dom, since DomI is initial.
+      case f of
+        Lam clo -> clo x
+        _ -> Err ();
+  Plus ~> 
+    \(x,y) ->
+      -- We can pattern match here for the same reasons as above.
+      case (x,y) of
+        (Lit i, Lit j) -> Lit (i + j)
+         _ -> Err ();
+  };
+
+def nat_trans InitLam : LambdaI -> Eval = [ LambdaI is initial ];
+
+def function eval = InitLam(Term);
+
+def sketch LetLambda = Lambda + {
   mor Let : (Term => Term, Term) -> Term;
+};
+
+def LetLambdaTh = theory(LetLambda);
+
+def functor LetLambdaI : LetLambdaTh -> Type = [initial];
+
+def functor IotaLam : LambdaTh -> LetLambdaTh =
+  [caninical via underlying sketches];
+
+def functor DesugarLets : LetLambdaTh -> LambdaTh = {
+  cartesian;
+  retracts IotaLam;
+  Let  ~>  \(letBody, v) -> App (Lam letBody, v)
 }
 
-theory Lambda {
+def nat_trans Phi : LetLambdaI -> LambdaI . DesugarLets =
+  [ LetLambdaI is initial ];
 
-  type Term;
-  type ListTerm;
-  type IntLit;
+def function desugarLets = Phi(Term);
 
-  emptyList : ListTerm;
-  cons : Term -> ListTerm -> ListTerm;
-  
-  App : (Term, Term) -> Term;
-  Lam : (Term -> Term) -> Term;
-  Lit : IntLit -> Term;
-  List : ListTerm -> Term;
+def DomT = DomI(Term);
+def LetT = LetLambdaI(Term);
+def LamT = LambdaI(Term);
 
-}
+--
 
-model phi : LetLambda -> Lambda {
+-- Some parser:
+def function parseLet : Text -> Maybe LetT = ...;
 
-  Term |-> Term;
-  IntLit |-> IntLit;
-
-  App |-> App;
-
-  Lam |-> Lam;
-
-  Let |-> \x -> case x of (body, val) -> App (Lam body) val;
-}
-
-model lambdaLet = LetLambda -> TT = free;
-model lambdaSimple = Lambda -> TT = free;
-
+main = do
+  input <- getLine
+  putStrLn $ case parseLet input of
+    Nothing -> "parse error"
+    Just term -> show . eval . desugarLets $ term
